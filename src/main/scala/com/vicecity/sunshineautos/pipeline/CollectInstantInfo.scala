@@ -9,6 +9,7 @@ import java.io.PrintWriter
 import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
+import java.io.FileWriter
 
 object CollectInstantInfo {
   
@@ -35,18 +36,18 @@ object CollectInstantInfo {
     }
   )
 
-  def createStream(ds: DStream[(FrameNumber, InstantInfo)]): DStream[(CollectInstantInfo.FrameNumber, DriverState)] = {
+  def createStream(ds: DStream[(Int, InstantInfo)], outputFile: String): DStream[(CollectInstantInfo.FrameNumber, DriverState)] = {
     val spec = StateSpec.function(updateDriverState _)
     val mapped = ds.mapWithState(spec)
-    val mappedSorted = mapped.mapPartitions(_.toList.sortBy(_.get._1).toIterator)
-    mappedSorted.flatMap(x => x).foreachRDD{x => 
-      val when = Instant.now.toEpochMilli()
-      x.foreach{case (x, y) =>
-      val pwo = new PrintWriter(new FileOutputStream(new File(s"/Users/ricky/Documents/projects/burning_streaming/src/test/resources/output_full_$when.csv"), true))  
-      pwo.write(s"\n$x,${y.avgSpeed},${y.profile}\n")
-      pwo.close
+    val mappedFlat = mapped.flatMap{ x => x }
+    mappedFlat.foreachRDD{_.foreach{case (x, y) =>
+      //Don't try this at home - this is just a quick and very dirty way to create the output state we need for the real test.
+      //This is rather safe if local mode is on just one thread, otherwise expect dirty output files.
+      val fw = new FileWriter(outputFile, true)
+      fw.write(s"$x,${y.avgSpeed},${y.profile}\n")
+      fw.close()
     }}
-    mappedSorted.flatMap(x => x)
+    mappedFlat
   }
 
 }
